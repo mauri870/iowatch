@@ -29,3 +29,9 @@ echo "dir/to/watch" | entr echo 'Do something'
 ```bash
 cargo build --release
 ```
+
+## Arch Linux installation
+
+```bash
+makepkg -sif
+```
