@@ -6,3 +6,4 @@ edition = "2018"
 
 [dependencies]
 notify = "4.0.0"
+clap = "2.32.0"
