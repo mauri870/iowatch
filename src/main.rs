@@ -45,8 +45,9 @@ fn main() {
     loop {
         match rx.recv() {
             // Discard initial notices
-            Ok(DebouncedEvent::NoticeWrite(_)) => {}
-            Ok(DebouncedEvent::NoticeRemove(_)) => {}
+            Ok(DebouncedEvent::NoticeWrite(_)) => continue,
+            Ok(DebouncedEvent::NoticeRemove(_)) => continue,
+            Ok(DebouncedEvent::Chmod(_)) => continue,
             Ok(_) => run_command(&command),
             Err(e) => panic!("watch error: {}", e),
         }
