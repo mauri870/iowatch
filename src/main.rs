@@ -15,15 +15,19 @@ fn main() {
         .version(&crate_version!()[..])
         .author("Mauri de Souza nunes <mauri870@gmail.com>")
         .about(
-            "Cross platform way to run arbitrary commands when files change.",
+            "Cross platform way to run arbitrary commands when files change",
         )
         .arg(Arg::with_name("clear").short("c").help(
             "Clear the screen before invoking the utility",
+        ))
+        .arg(Arg::with_name("postpone").short("p").help(
+            "Postpone the first execution of the utility until a file is modified",
         ))
         .arg(Arg::with_name("utility").multiple(true))
         .get_matches();
 
     let clear_term = matches.is_present("clear");
+    let postpone = matches.is_present("postpone");
     let utility = matches.values_of_lossy("utility").unwrap();
 
     if utility.is_empty() {
@@ -57,7 +61,9 @@ fn main() {
     }
 
     // Running first iteration manually
-    run_command(&utility, clear_term);
+    if !postpone {
+        run_command(&utility, clear_term);
+    }
 
     loop {
         match rx.recv() {
