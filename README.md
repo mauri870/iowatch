@@ -21,7 +21,7 @@ echo "That's got to be the best pirate I've ever seen" >> /tmp/file.txt
 It also watch changes recursively if a directory is provided!
 
 ```bash
-echo "dir/to/watch" | entr echo 'Do something'
+echo "dir/to/watch" | entr -R echo 'Do something'
 ```
 
 ## Compilation
