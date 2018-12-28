@@ -31,11 +31,9 @@ fn main() {
     let clear_term = matches.is_present("clear");
     let postpone = matches.is_present("postpone");
     let recursive = matches.is_present("recursive");
-    let utility = matches.values_of_lossy("utility").unwrap();
-
-    if utility.is_empty() {
-        panic!("No utility provided");
-    }
+    let utility = matches.values_of_lossy("utility").expect(
+        "No utility provided!",
+    );
 
     let mut buf = String::new();
     io::stdin().read_to_string(&mut buf).expect(
@@ -61,9 +59,8 @@ fn main() {
         RecursiveMode::NonRecursive
     };
     for f in &files {
-        match watcher.watch(f, recursive_mode) {
-            Err(_) => panic!("Failed to watch {}", f),
-            _ => {}
+        if let Err(err) = watcher.watch(f, recursive_mode) {
+            panic!("Failed to watch {} - {}", f, err);
         }
     }
 
