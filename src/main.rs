@@ -1,13 +1,35 @@
 extern crate notify;
+#[macro_use]
+extern crate clap;
 
+use clap::{Arg, App};
 use notify::{RecommendedWatcher, Watcher, RecursiveMode, DebouncedEvent};
 use std::sync::mpsc;
 use std::time::Duration;
 use std::io::{self, Read, ErrorKind};
-use std::process::{Command, Stdio};
+use std::process::{Command, Output, Stdio};
 
 // TODO: Add a verbose flag
 fn main() {
+    let matches = App::new("entr")
+        .version(&crate_version!()[..])
+        .author("Mauri de Souza nunes <mauri870@gmail.com>")
+        .about(
+            "Cross platform way to run arbitrary commands when files change.",
+        )
+        .arg(Arg::with_name("clear").short("c").help(
+            "Clear the screen before invoking the utility",
+        ))
+        .arg(Arg::with_name("utility").multiple(true))
+        .get_matches();
+
+    let clear_term = matches.is_present("clear");
+    let utility = matches.values_of_lossy("utility").unwrap();
+
+    if utility.is_empty() {
+        panic!("No utility provided");
+    }
+
     let mut buf = String::new();
     io::stdin().read_to_string(&mut buf).expect(
         "Failed to read files to watch",
@@ -23,11 +45,6 @@ fn main() {
         panic!("No files or dirs to watch");
     }
 
-    let command: Vec<_> = std::env::args().skip(1).collect();
-    if command.is_empty() {
-        panic!("No command provided");
-    }
-
     let (tx, rx) = mpsc::channel();
     let mut watcher: RecommendedWatcher = Watcher::new(tx, Duration::from_secs(0)).unwrap();
 
@@ -40,7 +57,7 @@ fn main() {
     }
 
     // Running first iteration manually
-    run_command(&command);
+    run_command(&utility, clear_term);
 
     loop {
         match rx.recv() {
@@ -48,26 +65,43 @@ fn main() {
             Ok(DebouncedEvent::NoticeWrite(_)) => continue,
             Ok(DebouncedEvent::NoticeRemove(_)) => continue,
             Ok(DebouncedEvent::Chmod(_)) => continue,
-            Ok(_) => run_command(&command),
+            Ok(_) => run_command(&utility, clear_term),
             Err(e) => panic!("watch error: {}", e),
         }
     }
 }
 
-fn run_command(command: &Vec<String>) {
-    match Command::new(&command[0])
-        .args(&command[1..])
+fn clear_term_screen() -> io::Result<Output> {
+    let clear_cmd = if cfg!(windows) {
+        "cls"
+    } else {
+        // Assume POSIX
+        "clear"
+    };
+    Command::new(clear_cmd)
+        .stdout(Stdio::inherit())
+        .stderr(Stdio::inherit())
+        .output()
+}
+
+fn run_command(utility: &Vec<String>, clear_term: bool) {
+    if clear_term {
+        clear_term_screen().expect("Failed to clear terminal screen");
+    }
+
+    match Command::new(&utility[0])
+        .args(&utility[1..])
         .stdout(Stdio::inherit())
         .stderr(Stdio::inherit())
         .output() {
         Err(e) => {
             if let ErrorKind::NotFound = e.kind() {
                 panic!(
-                    "{} was not found! Check your PATH or the provided command!",
-                    &command[0]
+                    "{} was not found! Check your PATH or the provided utility!",
+                    &utility[0]
                 );
             } else {
-                panic!("Error running the specified command: {}", e);
+                panic!("Error running the specified utility: {}", e);
             }
         }
         _ => {}
