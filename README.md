@@ -12,10 +12,10 @@ Example:
 
 ```bash
 touch /tmp/file.txt
-find /tmp -type f -name "*.txt" | entr echo 'Captain! Look!'
+find /tmp -type f -name "*.txt" | entr -p echo 'Captain! Look!'
 
 # in another terminal...
-echo "Appending to file..." >> /tmp/file.txt
+echo "That's got to be the best pirate I've ever seen" >> /tmp/file.txt
 ```
 
 It also watch changes recursively if a directory is provided!
