@@ -9,7 +9,6 @@ use std::time::Duration;
 use std::io::{self, Read, ErrorKind};
 use std::process::{Command, Output, Stdio};
 
-// TODO: Add a verbose flag
 fn main() {
     let matches = App::new("entr")
         .version(&crate_version!()[..])
@@ -23,11 +22,15 @@ fn main() {
         .arg(Arg::with_name("postpone").short("p").help(
             "Postpone the first execution of the utility until a file is modified",
         ))
+        .arg(Arg::with_name("recursive").short("R").help(
+            "Watch for changes in directories recursively",
+        ))
         .arg(Arg::with_name("utility").multiple(true))
         .get_matches();
 
     let clear_term = matches.is_present("clear");
     let postpone = matches.is_present("postpone");
+    let recursive = matches.is_present("recursive");
     let utility = matches.values_of_lossy("utility").unwrap();
 
     if utility.is_empty() {
@@ -52,9 +55,13 @@ fn main() {
     let (tx, rx) = mpsc::channel();
     let mut watcher: RecommendedWatcher = Watcher::new(tx, Duration::from_secs(0)).unwrap();
 
+    let recursive_mode = if recursive {
+        RecursiveMode::Recursive
+    } else {
+        RecursiveMode::NonRecursive
+    };
     for f in &files {
-        // TODO: Add a recursive flag
-        match watcher.watch(f, RecursiveMode::Recursive) {
+        match watcher.watch(f, recursive_mode) {
             Err(_) => panic!("Failed to watch {}", f),
             _ => {}
         }
