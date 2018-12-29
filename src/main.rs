@@ -25,7 +25,9 @@ fn main() {
         .arg(Arg::with_name("recursive").short("R").help(
             "Watch for changes in directories recursively",
         ))
-        .arg(Arg::with_name("utility").multiple(true))
+        .arg(Arg::with_name("utility").multiple(true).help(
+            "The utility to run when files change",
+        ))
         .get_matches();
 
     let clear_term = matches.is_present("clear");
