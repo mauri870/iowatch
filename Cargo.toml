@@ -6,4 +6,6 @@ edition = "2018"
 
 [dependencies]
 notify = "4.0.0"
-clap = "2.32.0"
+failure = "0.1.4"
+exitfailure = "0.5.1"
+structopt = "0.2.14"
