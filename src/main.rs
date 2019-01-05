@@ -47,7 +47,7 @@ impl Entr {
         mut self,
         rx: Receiver<DebouncedEvent>,
         mut watcher: RecommendedWatcher,
-    ) -> Result<(), ExitFailure> {
+    ) -> Result<(), Error> {
         self.utility = if !self.use_shell {
             self.utility
         } else {
@@ -146,5 +146,5 @@ fn main() -> Result<(), ExitFailure> {
     let (tx, rx) = mpsc::channel();
     let watcher: RecommendedWatcher = Watcher::new(tx, Duration::from_secs(0)).unwrap();
 
-    Entr::from_args().run(rx, watcher)
+    Ok(Entr::from_args().run(rx, watcher)?)
 }
