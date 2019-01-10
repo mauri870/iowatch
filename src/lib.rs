@@ -44,7 +44,7 @@ impl Entr {
     /// Run the application
     pub fn run(
         mut self,
-        rx: Receiver<DebouncedEvent>,
+        rx: &Receiver<DebouncedEvent>,
         mut watcher: RecommendedWatcher,
     ) -> Result<(), ExitFailure> {
         self.utility = if !self.use_shell {
@@ -57,10 +57,10 @@ impl Entr {
 
         let mut buf = String::new();
         io::stdin().read_to_string(&mut buf).with_context(|_| {
-            format!("Failed to read files to watch")
+            "Failed to read files to watch".to_string()
         })?;
 
-        let files: Vec<&str> = buf.trim().split("\n").filter(|s| !s.is_empty()).collect();
+        let files: Vec<&str> = buf.trim().split('\n').filter(|s| !s.is_empty()).collect();
 
         if files.is_empty() {
             Err(EntrError::NoFilesToWatch)?
@@ -89,7 +89,7 @@ impl Entr {
                 Ok(DebouncedEvent::NoticeRemove(_)) => continue,
                 Ok(DebouncedEvent::Chmod(_)) => continue,
                 Ok(_) => self.run_utility()?,
-                Err(e) => Err(e).with_context(|_| format!("Error watching files"))?,
+                Err(e) => Err(e).with_context(|_| "Error watching files".to_string())?,
             }
         }
     }
@@ -100,7 +100,7 @@ impl Entr {
             vec!["cmd".to_string(), "/c".to_string()]
         } else {
             // Assume GNU
-            let shell = env::var("SHELL").unwrap_or("/bin/sh".to_string());
+            let shell = env::var("SHELL").unwrap_or_else(|_| "/bin/sh".to_string());
             vec![shell, "-c".to_string()]
         }
     }
@@ -122,7 +122,7 @@ impl Entr {
     fn run_utility(&self) -> Result<(), Error> {
         if self.clear_term {
             self.clear_term_screen().with_context(|_| {
-                format!("Failed to clear terminal screen")
+                "Failed to clear terminal screen".to_string()
             })?;
         }
 
