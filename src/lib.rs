@@ -12,7 +12,6 @@ use std::process::Command;
 use notify::{RecommendedWatcher, Watcher, RecursiveMode, DebouncedEvent};
 use structopt::StructOpt;
 use failure::{Error, ResultExt};
-use exitfailure::ExitFailure;
 
 #[derive(Debug, Fail)]
 pub enum EntrError {
@@ -46,7 +45,7 @@ impl Entr {
         mut self,
         rx: &Receiver<DebouncedEvent>,
         mut watcher: RecommendedWatcher,
-    ) -> Result<(), ExitFailure> {
+    ) -> Result<(), Error> {
         self.utility = if !self.use_shell {
             self.utility
         } else {
@@ -71,7 +70,8 @@ impl Entr {
         } else {
             RecursiveMode::NonRecursive
         };
-        for f in &files {
+
+        for ref f in &files {
             watcher.watch(f, recursive_mode).with_context(|_| {
                 format!("Failed to watch {}", f)
             })?;
@@ -107,14 +107,9 @@ impl Entr {
 
     /// Clear the terminal screen
     fn clear_term_screen(&self) -> Result<(), Error> {
-        let clear_cmd = if cfg!(windows) {
-            "cls"
-        } else {
-            // Assume POSIX
-            "clear"
-        };
-        Command::new(clear_cmd).status()?;
-
+        Command::new("clear").status().or_else(|_| {
+            Command::new("cmd").args(&["/c", "cls"]).status()
+        })?;
         Ok(())
     }
 
