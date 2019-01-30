@@ -4,14 +4,14 @@ extern crate structopt;
 extern crate failure;
 extern crate exitfailure;
 
-use std::sync::mpsc::Receiver;
-use std::io::{self, Read};
 use std::env;
+use std::io::{self, Read};
 use std::process::Command;
+use std::sync::mpsc::Receiver;
 
-use notify::{RecommendedWatcher, Watcher, RecursiveMode, DebouncedEvent};
-use structopt::StructOpt;
 use failure::{Error, ResultExt};
+use notify::{DebouncedEvent, RecommendedWatcher, RecursiveMode, Watcher};
+use structopt::StructOpt;
 
 #[derive(Debug, Fail)]
 pub enum EntrError {
@@ -20,8 +20,10 @@ pub enum EntrError {
 }
 
 #[derive(Debug, StructOpt)]
-#[structopt(name = "entr",
-            about = "Cross platform way to run arbitrary commands when files change")]
+#[structopt(
+    name = "entr",
+    about = "Cross platform way to run arbitrary commands when files change"
+)]
 pub struct Entr {
     /// Clear the screen before invoking the utility
     #[structopt(short = "c")]
@@ -55,9 +57,9 @@ impl Entr {
         };
 
         let mut buf = String::new();
-        io::stdin().read_to_string(&mut buf).with_context(|_| {
-            "Failed to read files to watch".to_string()
-        })?;
+        io::stdin()
+            .read_to_string(&mut buf)
+            .with_context(|_| "Failed to read files to watch".to_string())?;
 
         let files: Vec<&str> = buf.trim().split('\n').filter(|s| !s.is_empty()).collect();
 
@@ -71,10 +73,10 @@ impl Entr {
             RecursiveMode::NonRecursive
         };
 
-        for ref f in &files {
-            watcher.watch(f, recursive_mode).with_context(|_| {
-                format!("Failed to watch {}", f)
-            })?;
+        for &f in &files {
+            watcher
+                .watch(f, recursive_mode)
+                .with_context(|_| format!("Failed to watch {}", f))?;
         }
 
         // Running first iteration manually
@@ -107,26 +109,23 @@ impl Entr {
 
     /// Clear the terminal screen
     fn clear_term_screen(&self) -> Result<(), Error> {
-        Command::new("clear").status().or_else(|_| {
-            Command::new("cmd").args(&["/c", "cls"]).status()
-        })?;
+        Command::new("clear")
+            .status()
+            .or_else(|_| Command::new("cmd").args(&["/c", "cls"]).status())?;
         Ok(())
     }
 
     /// Run the provided utility
     fn run_utility(&self) -> Result<(), Error> {
         if self.clear_term {
-            self.clear_term_screen().with_context(|_| {
-                "Failed to clear terminal screen".to_string()
-            })?;
+            self.clear_term_screen()
+                .with_context(|_| "Failed to clear terminal screen".to_string())?;
         }
 
         Command::new(&self.utility[0])
             .args(&self.utility[1..])
             .spawn()
-            .with_context(|_| {
-                format!("{} Failed to run the provided utility", &self.utility[0])
-            })?;
+            .with_context(|_| format!("{} Failed to run the provided utility", &self.utility[0]))?;
 
         Ok(())
     }
