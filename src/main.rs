@@ -1,8 +1,3 @@
-extern crate entr;
-extern crate notify;
-extern crate exitfailure;
-extern crate structopt;
-
 use std::sync::mpsc;
 use std::time::Duration;
 

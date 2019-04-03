@@ -1,15 +1,9 @@
-extern crate notify;
-extern crate structopt;
-#[macro_use]
-extern crate failure;
-extern crate exitfailure;
-
 use std::env;
 use std::io::{self, Read};
 use std::process::Command;
 use std::sync::mpsc::Receiver;
 
-use failure::{Error, ResultExt};
+use failure::{Fail, Error, ResultExt};
 use notify::{DebouncedEvent, RecommendedWatcher, RecursiveMode, Watcher};
 use structopt::StructOpt;
 
