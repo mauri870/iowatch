@@ -5,29 +5,35 @@ Cross platform way to run arbitrary commands when files change.
 ## Usage
 
 ```bash
-echo "filenames" | iowatch command
+iowatch command
 ```
 
 Example:
 
 ```bash
 touch /tmp/file.txt
-find /tmp -type f -name "*.txt" | iowatch -p echo 'Captain! Look!'
+echo /tmp/file.txt | iowatch -p echo "That's got to be the best pirate I've ever seen"
 
 # in another terminal...
-echo "That's got to be the best pirate I've ever seen" >> /tmp/file.txt
+echo 'Captain, Look!' >> /tmp/file.txt
 ```
 
 For commands that uses builtins, pipes or output redirection that needs to run in a shell, there's a `-s` flag that uses the default system shell:
 
 ```bash
-find /tmp -type f -name "*.txt" | iowatch -s "echo 'Captain! Look!' | rev"
+find /tmp -type f -name "/tmp/*.txt" | iowatch -s "echo 'Captain! Look!' | rev"
 ```
 
 It also watch changes recursively if a directory is provided!
 
 ```bash
-echo "dir/to/watch" | iowatch -R echo 'Do something'
+echo "dir/to/watch" | iowatch -R echo '!'
+```
+
+A real world use case for example is the linting of a project with hot reload:
+
+```bash
+echo "./src" | iowatch -R yarn run lint
 ```
 
 ## Compilation
