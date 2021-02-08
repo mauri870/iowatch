@@ -1,7 +1,8 @@
 use std::env;
 use std::io::{self, Read};
 use std::process::Command;
-use std::sync::mpsc::Receiver;
+use std::time::Duration;
+use std::sync::mpsc::{Receiver, RecvTimeoutError};
 
 use failure::{Fail, Error, ResultExt};
 use notify::{DebouncedEvent, RecommendedWatcher, RecursiveMode, Watcher};
@@ -31,6 +32,9 @@ pub struct IoWatch {
     /// Evaluate the first argument using the default interpreter
     #[structopt(short = "s")]
     use_shell: bool,
+    /// The amount of seconds to wait until the command is executed if no events have been fired
+    #[structopt(short = "t")]
+    timeout: Option<u64>,
     /// The utility to run when files change
     utility: Vec<String>,
 }
@@ -79,12 +83,12 @@ impl IoWatch {
         }
 
         loop {
-            match rx.recv() {
+            match rx.recv_timeout(Duration::from_secs(self.timeout.unwrap_or(u64::MAX))) {
                 // Discard initial notices
                 Ok(DebouncedEvent::NoticeWrite(_)) => continue,
                 Ok(DebouncedEvent::NoticeRemove(_)) => continue,
                 Ok(DebouncedEvent::Chmod(_)) => continue,
-                Ok(_) => self.run_utility()?,
+                Ok(_) | Err(RecvTimeoutError::Timeout) => self.run_utility()?,
                 Err(e) => Err(e).with_context(|_| "Error watching files".to_string())?,
             }
         }
