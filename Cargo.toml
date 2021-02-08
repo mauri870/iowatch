@@ -1,7 +1,7 @@
 [package]
-name = "entr"
+name = "iowatch"
 version = "0.1.0"
-authors = ["Mauri de Souza Nunes <mauri870@gmail.com>"]
+authors = ["Mauri de Souza Meneguzzo <mauri870@gmail.com>"]
 edition = "2018"
 
 [dependencies]

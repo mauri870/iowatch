@@ -8,17 +8,17 @@ use notify::{DebouncedEvent, RecommendedWatcher, RecursiveMode, Watcher};
 use structopt::StructOpt;
 
 #[derive(Debug, Fail)]
-pub enum EntrError {
+pub enum IoWatchError {
     #[fail(display = "No files or dirs to watch")]
     NoFilesToWatch,
 }
 
 #[derive(Debug, StructOpt)]
 #[structopt(
-    name = "entr",
+    name = "iowatch",
     about = "Cross platform way to run arbitrary commands when files change"
 )]
-pub struct Entr {
+pub struct IoWatch {
     /// Clear the screen before invoking the utility
     #[structopt(short = "c")]
     clear_term: bool,
@@ -35,7 +35,7 @@ pub struct Entr {
     utility: Vec<String>,
 }
 
-impl Entr {
+impl IoWatch {
     /// Run the application
     pub fn run(
         mut self,
@@ -45,7 +45,7 @@ impl Entr {
         self.utility = if !self.use_shell {
             self.utility
         } else {
-            let mut shell = Entr::get_shell_cmd();
+            let mut shell = IoWatch::get_shell_cmd();
             shell.append(&mut self.utility);
             shell
         };
@@ -58,7 +58,7 @@ impl Entr {
         let files: Vec<&str> = buf.trim().split('\n').filter(|s| !s.is_empty()).collect();
 
         if files.is_empty() {
-            Err(EntrError::NoFilesToWatch)?
+            Err(IoWatchError::NoFilesToWatch)?
         }
 
         let recursive_mode = if self.recursive {

@@ -1,11 +1,11 @@
-pkgname=entr-rs
+pkgname=iowatch
 pkgver=0.1.0
 pkgrel=0
 arch=('x86_64')
 pkgdesc='Cross-platform way to run arbitrary commands when files change'
-url='https://github.com/mauri870/entr'
-provides=('entr')
-conflicts=('entr')
+url='https://github.com/mauri870/iowatch'
+provides=('iowatch')
+conflicts=('iowatch')
 license=('MIT')
 makedepends=('rust' 'git')
 source=("${pkgname}::git+${url}.git")
@@ -23,5 +23,5 @@ check() {
 
 package() {
     cd "${srcdir}/${pkgname}"
-    install -Dm755 target/release/entr "$pkgdir"/usr/bin/entr
+    install -Dm755 target/release/iowatch "$pkgdir"/usr/bin/iowatch
 }
