@@ -58,6 +58,13 @@ impl IoWatch {
             shell
         };
 
+        if !self.postpone {
+            self.run_utility()?;
+            if self.exit_after {
+               return Ok(());
+            }
+        }
+
         let mut buf = String::new();
         io::stdin()
             .read_to_string(&mut buf)
@@ -79,11 +86,6 @@ impl IoWatch {
             watcher
                 .watch(f, recursive_mode)
                 .with_context(|| format!("Failed to watch {}", f))?;
-        }
-
-        // Running first iteration manually
-        if !self.postpone {
-            self.run_utility()?;
         }
 
         loop {
