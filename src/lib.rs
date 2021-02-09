@@ -4,13 +4,14 @@ use std::process::Command;
 use std::time::Duration;
 use std::sync::mpsc::{Receiver, RecvTimeoutError};
 
-use failure::{Fail, Error, ResultExt};
+use thiserror::Error;
+use anyhow::{Context, Result};
 use notify::{DebouncedEvent, RecommendedWatcher, RecursiveMode, Watcher};
 use structopt::StructOpt;
 
-#[derive(Debug, Fail)]
+#[derive(Debug, Error)]
 pub enum IoWatchError {
-    #[fail(display = "No files or dirs to watch")]
+    #[error("no files or directories to watch")]
     NoFilesToWatch,
 }
 
@@ -45,7 +46,7 @@ impl IoWatch {
         mut self,
         rx: &Receiver<DebouncedEvent>,
         mut watcher: RecommendedWatcher,
-    ) -> Result<(), Error> {
+    ) -> Result<(), anyhow::Error> {
         self.utility = if !self.use_shell {
             self.utility
         } else {
@@ -57,7 +58,7 @@ impl IoWatch {
         let mut buf = String::new();
         io::stdin()
             .read_to_string(&mut buf)
-            .with_context(|_| "Failed to read files to watch".to_string())?;
+            .context("Failed to read files to watch")?;
 
         let files: Vec<&str> = buf.trim().split('\n').filter(|s| !s.is_empty()).collect();
 
@@ -74,7 +75,7 @@ impl IoWatch {
         for &f in &files {
             watcher
                 .watch(f, recursive_mode)
-                .with_context(|_| format!("Failed to watch {}", f))?;
+                .with_context(|| format!("Failed to watch {}", f))?;
         }
 
         // Running first iteration manually
@@ -89,7 +90,7 @@ impl IoWatch {
                 Ok(DebouncedEvent::NoticeRemove(_)) => continue,
                 Ok(DebouncedEvent::Chmod(_)) => continue,
                 Ok(_) | Err(RecvTimeoutError::Timeout) => self.run_utility()?,
-                Err(e) => Err(e).with_context(|_| "Error watching files".to_string())?,
+                Err(e) => Err(e).context("Error watching files")?,
             }
         }
     }
@@ -106,7 +107,7 @@ impl IoWatch {
     }
 
     /// Clear the terminal screen
-    fn clear_term_screen(&self) -> Result<(), Error> {
+    fn clear_term_screen(&self) -> Result<(), anyhow::Error> {
         Command::new("clear")
             .status()
             .or_else(|_| Command::new("cmd").args(&["/c", "cls"]).status())?;
@@ -114,16 +115,16 @@ impl IoWatch {
     }
 
     /// Run the provided utility
-    fn run_utility(&self) -> Result<(), Error> {
+    fn run_utility(&self) -> Result<(), anyhow::Error> {
         if self.clear_term {
             self.clear_term_screen()
-                .with_context(|_| "Failed to clear terminal screen".to_string())?;
+                .context("Failed to clear terminal screen")?;
         }
 
         Command::new(&self.utility[0])
             .args(&self.utility[1..])
             .spawn()
-            .with_context(|_| format!("{} Failed to run the provided utility", &self.utility[0]))?;
+            .with_context(|| format!("failed to run the provided utility: {}", &self.utility[0]))?;
 
         Ok(())
     }

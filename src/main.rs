@@ -4,9 +4,8 @@ use std::time::Duration;
 use iowatch::IoWatch;
 use structopt::StructOpt;
 use notify::{RecommendedWatcher, Watcher};
-use exitfailure::ExitFailure;
 
-fn main() -> Result<(), ExitFailure> {
+fn main() -> Result<(), anyhow::Error> {
     let (tx, rx) = mpsc::channel();
     let watcher: RecommendedWatcher = Watcher::new(tx, Duration::from_secs(0)).unwrap();
 
