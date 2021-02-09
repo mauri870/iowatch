@@ -33,6 +33,9 @@ pub struct IoWatch {
     /// Evaluate the first argument using the default interpreter
     #[structopt(short = "s")]
     use_shell: bool,
+    /// Exit after the utility completes it's first execution
+    #[structopt(short = "z")]
+    exit_after: bool,
     /// The amount of seconds to wait until the command is executed if no events have been fired
     #[structopt(short = "t")]
     timeout: Option<u64>,
@@ -92,7 +95,13 @@ impl IoWatch {
                 Ok(_) | Err(RecvTimeoutError::Timeout) => self.run_utility()?,
                 Err(e) => Err(e).context("Error watching files")?,
             }
+
+            if self.exit_after {
+                break;
+            }
         }
+
+        Ok(())
     }
 
     /// Get the sytem's shell command string
