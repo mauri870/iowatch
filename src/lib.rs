@@ -82,7 +82,7 @@ impl IoWatch {
             RecursiveMode::NonRecursive
         };
 
-        for &f in &files {
+        for f in files {
             watcher
                 .watch(f, recursive_mode)
                 .with_context(|| format!("Failed to watch {}", f))?;
