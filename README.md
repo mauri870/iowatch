@@ -4,6 +4,8 @@ Cross platform way to run arbitrary commands when files change.
 
 ## Usage
 
+Download a prebuilt binary from the releases page or follow the compilation steps.
+
 ```bash
 iowatch command
 ```
@@ -34,6 +36,12 @@ A real world use case for example is the linting of a project with hot reload:
 
 ```bash
 echo "./src" | iowatch -R yarn run lint
+```
+
+Or the hot reload of a Latex project:
+
+```bash
+find . -type f \( -name "*.tex" -o -name "*.bib" -o -name "*.png" \) | iowatch tectonic paper.tex
 ```
 
 ## Compilation
