@@ -149,11 +149,14 @@ impl IoWatch {
         //     Some(child) => child.kill().with_context(|| format!("failed to kill child process")),
         //     None => Ok(()),
         // }
-        match &mut self.utility_process {
-            Some(child) => signal::kill(Pid::from_raw(child.id() as i32), self.kill_signal.parse::<Signal>()?)
-                .with_context(|| format!("failed to kill child process")),
-            None => Ok(()),
+
+        if let Some(child) = &mut self.utility_process {
+            signal::kill(Pid::from_raw(child.id() as i32), self.kill_signal.parse::<Signal>()?).context("failed to kill child process")?;
         }
+
+        self.utility_process = None;
+
+        Ok(())
     }
 
     /// Wait for a delay in ms
@@ -175,13 +178,13 @@ impl IoWatch {
 
         // apply delay only on subsequent runs
         if !self.first_run && self.delay.is_some() {
-            self.wait_delay()?
+            self.wait_delay()?;
         }
 
         self.utility_process = Some(Command::new(&self.utility[0])
             .args(&self.utility[1..])
             .spawn()
-            .with_context(|| format!("failed to run the provided utility: {}", &self.utility[0]))?);
+            .context(format!("failed to run the provided utility: {}", &self.utility[0]))?);
 
         self.first_run = false;
 
