@@ -1,12 +1,13 @@
 use std::{env, thread};
 use std::io::{self, Read};
 use std::process::{Command, Child};
+use std::path::Path;
 use std::time::Duration;
 use std::sync::mpsc::{Receiver, RecvTimeoutError};
 
 use thiserror::Error;
 use anyhow::{Context, Result};
-use notify::{DebouncedEvent, RecommendedWatcher, RecursiveMode, Watcher};
+use notify::{RecommendedWatcher, RecursiveMode, Watcher};
 use structopt::StructOpt;
 
 use nix::unistd::Pid;
@@ -63,7 +64,7 @@ impl IoWatch {
     /// Run the application
     pub fn run(
         mut self,
-        rx: &Receiver<DebouncedEvent>,
+        rx: &Receiver<notify::Result<notify::Event>>,
         mut watcher: RecommendedWatcher,
     ) -> Result<(), anyhow::Error> {
         self.first_run = true;
@@ -101,18 +102,20 @@ impl IoWatch {
 
         for f in files {
             watcher
-                .watch(f, recursive_mode)
+                .watch(Path::new(f), recursive_mode)
                 .with_context(|| format!("Failed to watch {}", f))?;
         }
 
         loop {
             match rx.recv_timeout(Duration::from_secs(self.timeout.unwrap_or(u64::MAX))) {
-                // Discard initial notices
-                Ok(DebouncedEvent::NoticeWrite(_)) => continue,
-                Ok(DebouncedEvent::NoticeRemove(_)) => continue,
-                Ok(DebouncedEvent::Chmod(_)) => continue,
-                Ok(_) | Err(RecvTimeoutError::Timeout) => self.run_utility()?,
-                Err(e) => Err(e).context("Error watching files")?,
+                Ok(result) => match result {
+                    Ok(notify::event::Event { kind: notify::event::EventKind::Access(_), ..}) => continue,
+                    Ok(notify::event::Event { kind: notify::event::EventKind::Other, ..}) => continue,
+                    Ok(_) => self.run_utility()?,
+                    Err(e) => Err(e).context("notify error")?,
+                },
+                Err(RecvTimeoutError::Timeout) => self.run_utility()?,
+                Err(e) => Err(e).context("channel error")?,
             }
 
             if self.exit_after {
