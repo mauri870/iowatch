@@ -1,5 +1,5 @@
 use std::io::{self, Read};
-use std::path::{Path, PathBuf};
+use std::path::Path;
 use std::process::{Child, Command};
 use std::sync::mpsc::{Receiver, RecvTimeoutError};
 use std::time::Duration;
@@ -10,24 +10,11 @@ use notify::{RecommendedWatcher, RecursiveMode, Watcher};
 use structopt::StructOpt;
 use thiserror::Error;
 
-use ignore::gitignore::Gitignore;
+use ignore::gitignore::{Gitignore, GitignoreBuilder};
 use ignore::Match;
 
 use nix::sys::signal::{self, Signal};
 use nix::unistd::Pid;
-
-/// Get the base dir to lookup ignore files
-fn base_ignore_path(p: impl AsRef<Path>) -> PathBuf {
-    let p_ref = p.as_ref();
-    if p_ref.is_dir() {
-        return p_ref.into();
-    }
-
-    match p_ref.parent() {
-        Some(d) => d.into(),
-        None => env::current_dir().unwrap(),
-    }
-}
 
 #[derive(Debug, Error)]
 pub enum IoWatchError {
@@ -122,12 +109,8 @@ impl IoWatch {
                 .with_context(|| format!("Failed to watch {}", f))?;
         }
 
-        let ignore_dir = base_ignore_path(&files[0]);
-
-        let (ignore_matcher, err) = Gitignore::new(ignore_dir);
-        if let Some(e) = err {
-            Err(e)?
-        }
+        let ignore_dir = env::current_dir()?;
+        let ignore_matcher = self.get_ignore_matcher(ignore_dir)?;
 
         loop {
             match rx.recv_timeout(Duration::from_secs(self.timeout.unwrap_or(u64::MAX))) {
@@ -141,8 +124,9 @@ impl IoWatch {
                         ..
                     }) => continue,
                     Ok(ev) => {
-                        if let Match::None =
-                            ignore_matcher.matched(&ev.paths[0], ev.paths[0].is_dir())
+                        let first_file = &ev.paths[0].canonicalize().unwrap();
+                        if let Match::None = ignore_matcher
+                            .matched_path_or_any_parents(first_file, first_file.is_dir())
                         {
                             self.run_utility()?;
                         }
@@ -159,6 +143,24 @@ impl IoWatch {
         }
 
         Ok(())
+    }
+
+    /// Creates an ignore matcher from ignore files in dir
+    fn get_ignore_matcher(&self, root: impl AsRef<Path>) -> Result<Gitignore, anyhow::Error> {
+        let gitignore_path = Path::new(root.as_ref()).join(".gitignore");
+        let ignore_path = Path::new(root.as_ref()).join(".ignore");
+
+        let mut builder = GitignoreBuilder::new(root);
+        if gitignore_path.exists() {
+            builder.add(".gitignore");
+        }
+
+        if ignore_path.exists() {
+            builder.add(".ignore");
+        }
+
+        let matcher = builder.build()?;
+        Ok(matcher)
     }
 
     /// Get the sytem's shell command string

@@ -20,6 +20,8 @@ echo /tmp/file.txt | iowatch -p echo "That's got to be the best pirate I've ever
 echo 'Captain, Look!' >> /tmp/file.txt
 ```
 
+> Note: iowatch has builtin support for .[git]ignore files ;)
+
 For commands that uses builtins, pipes or output redirection that needs to run in a shell, there's a `-s` flag that uses the default system shell:
 
 ```bash
