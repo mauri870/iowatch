@@ -8,7 +8,7 @@ use structopt::StructOpt;
 
 fn main() -> Result<()> {
     let (tx, rx) = mpsc::channel();
-    let watcher: RecommendedWatcher = Watcher::new(tx, Duration::from_secs(0)).unwrap();
+    let watcher: RecommendedWatcher = Watcher::new(tx, Duration::from_millis(25)).unwrap();
 
     IoWatch::from_args().run(&rx, watcher)?;
     Ok(())
