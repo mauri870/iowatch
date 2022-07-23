@@ -119,7 +119,18 @@ impl IoWatch {
                 Ok(DebouncedEvent::NoticeRemove(_)) => continue,
                 Ok(DebouncedEvent::Chmod(_)) => continue,
                 Ok(DebouncedEvent::Rescan) => continue,
-                Ok(_) => self.run_utility()?,
+                Ok(DebouncedEvent::Remove(_)) => continue,
+                Ok(DebouncedEvent::Error(e, _)) => Err(e)?,
+                Ok(
+                    DebouncedEvent::Create(p)
+                    | DebouncedEvent::Write(p)
+                    | DebouncedEvent::Rename(_, p),
+                ) => {
+                    if let Match::None = ignore_matcher.matched_path_or_any_parents(&p, p.is_dir())
+                    {
+                        self.run_utility()?;
+                    }
+                }
                 Err(RecvTimeoutError::Timeout) => self.run_utility()?,
                 Err(e) => Err(e).context("channel error")?,
             }
