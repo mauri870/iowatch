@@ -1,17 +1,33 @@
-use std::{env, thread};
 use std::io::{self, Read};
-use std::process::{Command, Child};
-use std::path::Path;
-use std::time::Duration;
+use std::path::{Path, PathBuf};
+use std::process::{Child, Command};
 use std::sync::mpsc::{Receiver, RecvTimeoutError};
+use std::time::Duration;
+use std::{env, thread};
 
-use thiserror::Error;
 use anyhow::{Context, Result};
 use notify::{RecommendedWatcher, RecursiveMode, Watcher};
 use structopt::StructOpt;
+use thiserror::Error;
 
-use nix::unistd::Pid;
+use ignore::gitignore::Gitignore;
+use ignore::Match;
+
 use nix::sys::signal::{self, Signal};
+use nix::unistd::Pid;
+
+/// Get the base dir to lookup ignore files
+fn base_ignore_path(p: impl AsRef<Path>) -> PathBuf {
+    let p_ref = p.as_ref();
+    if p_ref.is_dir() {
+        return p_ref.into();
+    }
+
+    match p_ref.parent() {
+        Some(d) => d.into(),
+        None => env::current_dir().unwrap(),
+    }
+}
 
 #[derive(Debug, Error)]
 pub enum IoWatchError {
@@ -79,7 +95,7 @@ impl IoWatch {
         if !self.postpone {
             self.run_utility()?;
             if self.exit_after {
-               return Ok(());
+                return Ok(());
             }
         }
 
@@ -100,18 +116,37 @@ impl IoWatch {
             RecursiveMode::NonRecursive
         };
 
-        for f in files {
+        for f in &files {
             watcher
                 .watch(Path::new(f), recursive_mode)
                 .with_context(|| format!("Failed to watch {}", f))?;
         }
 
+        let ignore_dir = base_ignore_path(&files[0]);
+
+        let (ignore_matcher, err) = Gitignore::new(ignore_dir);
+        if let Some(e) = err {
+            Err(e)?
+        }
+
         loop {
             match rx.recv_timeout(Duration::from_secs(self.timeout.unwrap_or(u64::MAX))) {
                 Ok(result) => match result {
-                    Ok(notify::event::Event { kind: notify::event::EventKind::Access(_), ..}) => continue,
-                    Ok(notify::event::Event { kind: notify::event::EventKind::Other, ..}) => continue,
-                    Ok(_) => self.run_utility()?,
+                    Ok(notify::event::Event {
+                        kind: notify::event::EventKind::Access(_),
+                        ..
+                    }) => continue,
+                    Ok(notify::event::Event {
+                        kind: notify::event::EventKind::Other,
+                        ..
+                    }) => continue,
+                    Ok(ev) => {
+                        if let Match::None =
+                            ignore_matcher.matched(&ev.paths[0], ev.paths[0].is_dir())
+                        {
+                            self.run_utility()?;
+                        }
+                    }
                     Err(e) => Err(e).context("notify error")?,
                 },
                 Err(RecvTimeoutError::Timeout) => self.run_utility()?,
@@ -154,7 +189,11 @@ impl IoWatch {
         // }
 
         if let Some(child) = &mut self.utility_process {
-            signal::kill(Pid::from_raw(child.id() as i32), self.kill_signal.parse::<Signal>()?).context("failed to kill child process")?;
+            signal::kill(
+                Pid::from_raw(child.id() as i32),
+                self.kill_signal.parse::<Signal>()?,
+            )
+            .context("failed to kill child process")?;
         }
 
         self.utility_process = None;
@@ -184,10 +223,15 @@ impl IoWatch {
             self.wait_delay()?;
         }
 
-        self.utility_process = Some(Command::new(&self.utility[0])
-            .args(&self.utility[1..])
-            .spawn()
-            .context(format!("failed to run the provided utility: {}", &self.utility[0]))?);
+        self.utility_process = Some(
+            Command::new(&self.utility[0])
+                .args(&self.utility[1..])
+                .spawn()
+                .context(format!(
+                    "failed to run the provided utility: {}",
+                    &self.utility[0]
+                ))?,
+        );
 
         self.first_run = false;
 
