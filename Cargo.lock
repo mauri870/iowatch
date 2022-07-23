@@ -129,8 +129,7 @@ dependencies = [
 [[package]]
 name = "globset"
 version = "0.4.9"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "0a1e17342619edbc21a964c2afbeb6c820c6a2560032872f397bb97ea127bd0a"
+source = "git+https://github.com/mauri870/ripgrep?branch=ignore-panic-outside-root#3540969bf91bea54b2a0efdf5b576a0fc2e76b80"
 dependencies = [
  "aho-corasick",
  "bstr",
@@ -160,8 +159,7 @@ dependencies = [
 [[package]]
 name = "ignore"
 version = "0.4.18"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "713f1b139373f96a2e0ce3ac931cd01ee973c3c5dd7c40c0c2efe96ad2b6751d"
+source = "git+https://github.com/mauri870/ripgrep?branch=ignore-panic-outside-root#3540969bf91bea54b2a0efdf5b576a0fc2e76b80"
 dependencies = [
  "crossbeam-utils",
  "globset",
