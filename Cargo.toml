@@ -2,10 +2,10 @@
 name = "iowatch"
 version = "0.2.0"
 authors = ["Mauri de Souza Meneguzzo <mauri870@gmail.com>"]
-edition = "2021"
+edition = "2018"
 
 [dependencies]
-notify = "5.0.0-pre.15"
+notify = "4.0.17"
 thiserror = "1.0.23"
 anyhow = "1.0"
 structopt = "0.3.26"

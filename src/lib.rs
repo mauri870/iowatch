@@ -6,7 +6,7 @@ use std::time::Duration;
 use std::{env, thread};
 
 use anyhow::{Context, Result};
-use notify::{RecommendedWatcher, RecursiveMode, Watcher};
+use notify::{DebouncedEvent, RecommendedWatcher, RecursiveMode, Watcher};
 use structopt::StructOpt;
 use thiserror::Error;
 
@@ -67,7 +67,7 @@ impl IoWatch {
     /// Run the application
     pub fn run(
         mut self,
-        rx: &Receiver<notify::Result<notify::Event>>,
+        rx: &Receiver<DebouncedEvent>,
         mut watcher: RecommendedWatcher,
     ) -> Result<()> {
         self.first_run = true;
@@ -105,7 +105,7 @@ impl IoWatch {
 
         for f in &files {
             watcher
-                .watch(Path::new(f), recursive_mode)
+                .watch(f, recursive_mode)
                 .with_context(|| format!("Failed to watch {}", f))?;
         }
 
@@ -114,25 +114,12 @@ impl IoWatch {
 
         loop {
             match rx.recv_timeout(Duration::from_secs(self.timeout.unwrap_or(u64::MAX))) {
-                Ok(result) => match result {
-                    Ok(notify::event::Event {
-                        kind: notify::event::EventKind::Access(_),
-                        ..
-                    }) => continue,
-                    Ok(notify::event::Event {
-                        kind: notify::event::EventKind::Other,
-                        ..
-                    }) => continue,
-                    Ok(ev) => {
-                        let first_file = &ev.paths[0].canonicalize().unwrap();
-                        if let Match::None = ignore_matcher
-                            .matched_path_or_any_parents(first_file, first_file.is_dir())
-                        {
-                            self.run_utility()?;
-                        }
-                    }
-                    Err(e) => Err(e).context("notify error")?,
-                },
+                // Discard initial notices
+                Ok(DebouncedEvent::NoticeWrite(_)) => continue,
+                Ok(DebouncedEvent::NoticeRemove(_)) => continue,
+                Ok(DebouncedEvent::Chmod(_)) => continue,
+                Ok(DebouncedEvent::Rescan) => continue,
+                Ok(_) => self.run_utility()?,
                 Err(RecvTimeoutError::Timeout) => self.run_utility()?,
                 Err(e) => Err(e).context("channel error")?,
             }

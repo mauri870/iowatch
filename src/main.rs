@@ -1,13 +1,15 @@
 use anyhow::Result;
+use std::sync::mpsc;
+use std::time::Duration;
+
 use iowatch::IoWatch;
 use notify::{RecommendedWatcher, Watcher};
-use std::sync::mpsc;
 use structopt::StructOpt;
 
 fn main() -> Result<()> {
     let (tx, rx) = mpsc::channel();
-    let w: RecommendedWatcher = RecommendedWatcher::new(tx).unwrap();
+    let watcher: RecommendedWatcher = Watcher::new(tx, Duration::from_secs(0)).unwrap();
 
-    IoWatch::from_args().run(&rx, w)?;
+    IoWatch::from_args().run(&rx, watcher)?;
     Ok(())
 }
