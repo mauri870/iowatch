@@ -196,6 +196,8 @@ impl IoWatch {
                 self.kill_signal.parse::<Signal>()?,
             )
             .context("failed to kill child process")?;
+
+            child.wait()?;
         }
 
         self.utility_process = None;
