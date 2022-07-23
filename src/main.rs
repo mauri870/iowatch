@@ -1,9 +1,10 @@
-use std::sync::mpsc;
+use anyhow::Result;
 use iowatch::IoWatch;
-use structopt::StructOpt;
 use notify::{RecommendedWatcher, Watcher};
+use std::sync::mpsc;
+use structopt::StructOpt;
 
-fn main() -> Result<(), anyhow::Error> {
+fn main() -> Result<()> {
     let (tx, rx) = mpsc::channel();
     let w: RecommendedWatcher = RecommendedWatcher::new(tx).unwrap();
 

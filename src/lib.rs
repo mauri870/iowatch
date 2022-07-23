@@ -69,7 +69,7 @@ impl IoWatch {
         mut self,
         rx: &Receiver<notify::Result<notify::Event>>,
         mut watcher: RecommendedWatcher,
-    ) -> Result<(), anyhow::Error> {
+    ) -> Result<()> {
         self.first_run = true;
         self.utility = if !self.use_shell {
             self.utility
@@ -146,7 +146,7 @@ impl IoWatch {
     }
 
     /// Creates an ignore matcher from ignore files in dir
-    fn get_ignore_matcher(&self, root: impl AsRef<Path>) -> Result<Gitignore, anyhow::Error> {
+    fn get_ignore_matcher(&self, root: impl AsRef<Path>) -> Result<Gitignore> {
         let gitignore_path = Path::new(root.as_ref()).join(".gitignore");
         let ignore_path = Path::new(root.as_ref()).join(".ignore");
 
@@ -175,7 +175,7 @@ impl IoWatch {
     }
 
     /// Clear the terminal screen
-    fn clear_term_screen(&self) -> Result<(), anyhow::Error> {
+    fn clear_term_screen(&self) -> Result<()> {
         Command::new("clear")
             .status()
             .or_else(|_| Command::new("cmd").args(&["/c", "cls"]).status())?;
@@ -183,7 +183,7 @@ impl IoWatch {
     }
 
     /// Kill the utility if still running
-    fn kill_utility(&mut self) -> Result<(), anyhow::Error> {
+    fn kill_utility(&mut self) -> Result<()> {
         // TODO(mauri870): use the more generic approach below for windows
         // match &mut self.utility_process {
         //     Some(child) => child.kill().with_context(|| format!("failed to kill child process")),
@@ -204,13 +204,13 @@ impl IoWatch {
     }
 
     /// Wait for a delay in ms
-    fn wait_delay(&self) -> Result<(), anyhow::Error> {
+    fn wait_delay(&self) -> Result<()> {
         thread::sleep(Duration::from_millis(self.delay.unwrap_or(0)));
         Ok(())
     }
 
     /// Run the provided utility
-    fn run_utility(&mut self) -> Result<(), anyhow::Error> {
+    fn run_utility(&mut self) -> Result<()> {
         if self.utility_process.is_some() {
             self.kill_utility()?;
         }
