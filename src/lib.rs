@@ -1,5 +1,3 @@
-extern crate clap;
-
 use std::io::{self, Read};
 use std::path::Path;
 use std::process::{Child, Command};
