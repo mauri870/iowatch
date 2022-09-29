@@ -8,6 +8,6 @@ edition = "2018"
 notify = "4.0.17"
 thiserror = "1.0.23"
 anyhow = "1.0"
-structopt = "0.3.26"
+clap = { version = "4.0.4", features = ["derive"]}
 nix = "0.24.2"
 ignore = { git = "https://github.com/mauri870/ripgrep", branch = "ignore-panic-outside-root" }

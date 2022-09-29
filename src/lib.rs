@@ -1,3 +1,5 @@
+extern crate clap;
+
 use std::io::{self, Read};
 use std::path::Path;
 use std::process::{Child, Command};
@@ -6,8 +8,8 @@ use std::time::Duration;
 use std::{env, thread};
 
 use anyhow::{Context, Result};
+use clap::Parser;
 use notify::{DebouncedEvent, RecommendedWatcher, RecursiveMode, Watcher};
-use structopt::StructOpt;
 use thiserror::Error;
 
 use ignore::gitignore::{Gitignore, GitignoreBuilder};
@@ -22,44 +24,42 @@ pub enum IoWatchError {
     NoFilesToWatch,
 }
 
-#[derive(Debug, StructOpt)]
-#[structopt(
-    name = "iowatch",
-    about = "Cross platform way to run arbitrary commands when files change"
-)]
+#[derive(Debug, Parser)]
+#[command(name = "iowatch")]
+#[command(about = "Cross platform way to run arbitrary commands when files change")]
 pub struct IoWatch {
     /// Clear the screen before invoking the utility
-    #[structopt(short = "c")]
+    #[arg(short = 'c')]
     clear_term: bool,
     /// Postpone the first execution of the utility until a file is modified
-    #[structopt(short = "p")]
+    #[arg(short = 'p')]
     postpone: bool,
     /// Watch for changes in directories recursively
-    #[structopt(short = "R")]
+    #[arg(short = 'R')]
     recursive: bool,
     /// Evaluate the first argument using the default interpreter
-    #[structopt(short = "s")]
+    #[arg(short = 's')]
     use_shell: bool,
     /// Exit after the utility completes it's first execution
-    #[structopt(short = "z")]
+    #[arg(short = 'z')]
     exit_after: bool,
     /// The amount of seconds to wait until the command is executed if no events have been fired
-    #[structopt(short = "t")]
+    #[arg(short = 't')]
     timeout: Option<u64>,
     /// The time delay in ms to apply before running the utility
-    #[structopt(short = "d")]
+    #[arg(short = 'd')]
     delay: Option<u64>,
     /// The kill signal to use, defaults to SIGTERM
-    #[structopt(short = "k", default_value = "SIGTERM")]
+    #[arg(short = 'k', default_value = "SIGTERM")]
     kill_signal: String,
     /// The utility to run when files change
     utility: Vec<String>,
 
     /// The currently running utility process
-    #[structopt(skip)]
+    #[arg(skip)]
     utility_process: Option<Child>,
     /// Flag to track if is first execution
-    #[structopt(skip)]
+    #[arg(skip)]
     first_run: bool,
 }
 
