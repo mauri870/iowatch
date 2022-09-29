@@ -180,25 +180,21 @@ impl IoWatch {
 
     /// Kill the utility if still running
     fn kill_utility(&mut self) -> Result<()> {
-        // TODO(mauri870): use the more generic approach below for windows
-        // match &mut self.utility_process {
-        //     Some(child) => child.kill().with_context(|| format!("failed to kill child process")),
-        //     None => Ok(()),
-        // }
+        match self.utility_process {
+            Some(ref mut child) => {
+                if cfg!(unix) {
+                    let sig = self.kill_signal.parse::<Signal>()?;
+                    signal::kill(Pid::from_raw(child.id() as i32), sig)?;
+                } else {
+                    child
+                        .kill()
+                        .with_context(|| format!("failed to kill child process"))?;
+                }
 
-        if let Some(child) = &mut self.utility_process {
-            signal::kill(
-                Pid::from_raw(child.id() as i32),
-                self.kill_signal.parse::<Signal>()?,
-            )
-            .context("failed to kill child process")?;
-
-            child.wait()?;
+                child.wait().map(|_| ()).map_err(Into::into)
+            }
+            None => Ok(()),
         }
-
-        self.utility_process = None;
-
-        Ok(())
     }
 
     /// Wait for a delay in ms
