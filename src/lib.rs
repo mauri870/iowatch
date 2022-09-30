@@ -45,8 +45,8 @@ pub struct IoWatch {
     #[arg(short = 't')]
     timeout: Option<u64>,
     /// The time delay in ms to apply before running the utility
-    #[arg(short = 'd')]
-    delay: Option<u64>,
+    #[arg(short = 'd', default_value = "100")]
+    delay: u64,
     /// The kill signal to use, defaults to SIGTERM
     #[arg(short = 'k', default_value = "SIGTERM")]
     kill_signal: String,
@@ -199,7 +199,7 @@ impl IoWatch {
 
     /// Wait for a delay in ms
     fn wait_delay(&self) -> Result<()> {
-        thread::sleep(Duration::from_millis(self.delay.unwrap_or(0)));
+        thread::sleep(Duration::from_millis(self.delay));
         Ok(())
     }
 
@@ -215,7 +215,7 @@ impl IoWatch {
         }
 
         // apply delay only on subsequent runs
-        if !self.first_run && self.delay.is_some() {
+        if !self.first_run && self.delay > 0 {
             self.wait_delay()?;
         }
 
