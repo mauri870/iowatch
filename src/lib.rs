@@ -2,18 +2,18 @@ use std::io::{self, Read};
 use std::os::unix::process::CommandExt;
 use std::path::Path;
 use std::process::{Child, Command};
-use std::sync::mpsc::{Receiver, RecvTimeoutError};
 use std::time::Duration;
 use std::{env, thread};
 
 use anyhow::{Context, Result};
 use clap::Parser;
+use crossbeam_channel::select;
 use nix::sys::wait::{Id, WaitPidFlag};
-use notify::{DebouncedEvent, RecommendedWatcher, RecursiveMode, Watcher};
+use notify_debouncer_mini::new_debouncer;
+use notify_debouncer_mini::notify::RecursiveMode;
 use thiserror::Error;
 
 use ignore::gitignore::{Gitignore, GitignoreBuilder};
-use ignore::Match;
 
 use nix::sys::signal::{self, Signal};
 use nix::unistd::Pid;
@@ -65,11 +65,11 @@ pub struct IoWatch {
 
 impl IoWatch {
     /// Run the application
-    pub fn run(
-        mut self,
-        rx: &Receiver<DebouncedEvent>,
-        mut watcher: RecommendedWatcher,
-    ) -> Result<()> {
+    pub fn run(mut self) -> Result<()> {
+        let (tx, rx) = crossbeam_channel::unbounded();
+
+        let mut debouncer = new_debouncer(Duration::from_millis(25), None, tx)?;
+
         self.first_run = true;
         self.utility = if !self.use_shell {
             self.utility
@@ -103,40 +103,39 @@ impl IoWatch {
             RecursiveMode::NonRecursive
         };
 
-        for f in &files {
+        let watcher = debouncer.watcher();
+
+        for f in files {
             watcher
-                .watch(f, recursive_mode)
+                .watch(Path::new(f), recursive_mode)
                 .with_context(|| format!("Failed to watch {}", f))?;
         }
 
         let ignore_dir = env::current_dir()?;
         let ignore_matcher = self.get_ignore_matcher(ignore_dir)?;
 
+        // Handle timeout case in select to also run the utility
         loop {
-            match rx.recv_timeout(Duration::from_secs(self.timeout.unwrap_or(u64::MAX))) {
-                // Discard initial notices
-                Ok(DebouncedEvent::NoticeWrite(_)) => continue,
-                Ok(DebouncedEvent::NoticeRemove(_)) => continue,
-                Ok(DebouncedEvent::Chmod(_)) => continue,
-                Ok(DebouncedEvent::Rescan) => continue,
-                Ok(DebouncedEvent::Remove(_)) => continue,
-                Ok(DebouncedEvent::Error(e, _)) => Err(e)?,
-                Ok(
-                    DebouncedEvent::Create(p)
-                    | DebouncedEvent::Write(p)
-                    | DebouncedEvent::Rename(_, p),
-                ) => {
-                    if let Match::None = ignore_matcher.matched_path_or_any_parents(&p, p.is_dir())
-                    {
-                        self.run_utility()?;
+            select! {
+                recv(rx) -> res => {
+                    match res {
+                        Ok(inner) => match inner {
+                            Ok(events) => {
+                                let ignore = events.iter()
+                                    .any(|e| ignore_matcher.matched_path_or_any_parents(&e.path, e.path.is_dir()).is_ignore());
+                                if !ignore {
+                                    self.run_utility()?;
+
+                                    if self.exit_after {
+                                        break;
+                                    }
+                                }
+                            },
+                            Err(errors) =>  errors.iter().for_each(|e| eprintln!("Error {:?}",e)),
+                        },
+                        Err(e) => Err(e)?
                     }
                 }
-                Err(RecvTimeoutError::Timeout) => self.run_utility()?,
-                Err(e) => Err(e).context("channel error")?,
-            }
-
-            if self.exit_after {
-                break;
             }
         }
 
