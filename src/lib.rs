@@ -7,7 +7,7 @@ use std::{env, thread};
 
 use anyhow::{Context, Result};
 use clap::Parser;
-use crossbeam_channel::select;
+use crossbeam_channel::{select, Receiver};
 use nix::sys::wait::{Id, WaitPidFlag};
 use notify_debouncer_mini::new_debouncer;
 use notify_debouncer_mini::notify::RecursiveMode;
@@ -114,6 +114,8 @@ impl IoWatch {
         let ignore_dir = env::current_dir()?;
         let ignore_matcher = self.get_ignore_matcher(ignore_dir)?;
 
+        let ctrlc_rx = self.ctrlc_events()?;
+
         // Handle timeout case in select to also run the utility
         loop {
             select! {
@@ -135,11 +137,49 @@ impl IoWatch {
                         },
                         Err(e) => Err(e)?
                     }
+                },
+                recv(ctrlc_rx) -> _ => {
+                    self.kill_utility()?;
+                    break;
                 }
             }
+            // match rx.recv_timeout(Duration::from_secs(self.timeout.unwrap_or(u64::MAX))) {
+            //     // Discard initial notices
+            //     Ok(DebouncedEvent::NoticeWrite(_)) => continue,
+            //     Ok(DebouncedEvent::NoticeRemove(_)) => continue,
+            //     Ok(DebouncedEvent::Chmod(_)) => continue,
+            //     Ok(DebouncedEvent::Rescan) => continue,
+            //     Ok(DebouncedEvent::Remove(_)) => continue,
+            //     Ok(DebouncedEvent::Error(e, _)) => Err(e)?,
+            //     Ok(
+            //         DebouncedEvent::Create(p)
+            //         | DebouncedEvent::Write(p)
+            //         | DebouncedEvent::Rename(_, p),
+            //     ) => {
+            //         if let Match::None = ignore_matcher.matched_path_or_any_parents(&p, p.is_dir())
+            //         {
+            //             self.run_utility()?;
+
+            // if self.exit_after {
+            //     break;
+            // }
+            //         }
+            //     }
+            //     Err(RecvTimeoutError::Timeout) => self.run_utility()?,
+            //     Err(e) => Err(e).context("channel error")?,
+            // }
         }
 
         Ok(())
+    }
+
+    fn ctrlc_events(&self) -> Result<Receiver<()>, ctrlc::Error> {
+        let (tx, rx) = crossbeam_channel::bounded(1);
+        ctrlc::set_handler(move || {
+            let _ = tx.send(());
+        })?;
+
+        Ok(rx)
     }
 
     /// Creates an ignore matcher from ignore files in dir
