@@ -197,6 +197,8 @@ impl IoWatch {
 
                     signal::killpg(pgid, sig)?;
 
+                    // HACK: we use a custom nix crate to have waitid available on macos.
+                    // Not sure why they feature flagged macos, it definitely has a posix compliant waitid implementation.
                     nix::sys::wait::waitid(Id::PGid(pgid), WaitPidFlag::all())
                         .map(|_| ())
                         .map_err(Into::into)
