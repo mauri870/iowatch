@@ -8,7 +8,7 @@ edition = "2018"
 thiserror = "1.0.23"
 anyhow = "1.0"
 clap = { version = "4.0.4", features = ["derive"]}
-nix = { version = "0.24.2", features = ["process"]}
+nix = { git = "https://github.com/mauri870/nix", branch = "master", features = ["process"]}
 ignore = { git = "https://github.com/mauri870/ripgrep", branch = "ignore-panic-outside-root" }
 notify-debouncer-mini = "0.2.1"
 crossbeam = "0.8.2"
