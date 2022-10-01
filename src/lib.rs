@@ -5,8 +5,8 @@ use ignore::gitignore::{Gitignore, GitignoreBuilder};
 use nix::sys::signal::{self, Signal};
 use nix::sys::wait::{Id, WaitPidFlag};
 use nix::unistd::Pid;
-use notify_debouncer_mini::new_debouncer;
 use notify_debouncer_mini::notify::RecursiveMode;
+use notify_debouncer_mini::{new_debouncer, DebounceEventResult};
 use std::convert::TryFrom;
 use std::io::{self, Read};
 use std::os::unix::process::CommandExt;
@@ -81,8 +81,7 @@ impl IoWatch {
                 .with_context(|| format!("Failed to watch {}", f))?;
         }
 
-        let ignore_dir = env::current_dir()?;
-        let ignore_matcher = self.get_ignore_matcher(ignore_dir)?;
+        let ignore_matcher = self.get_ignore_matcher()?;
 
         let ctrlc_rx = self.ctrlc_events()?;
 
@@ -94,36 +93,46 @@ impl IoWatch {
         }
 
         loop {
-            select! {
-                // handle filesystem events
-                recv(rx) -> res => {
-                    match res {
-                        Ok(inner) => match inner {
-                            Ok(events) => {
-                                let ignore = events.iter()
-                                    .any(|e| ignore_matcher.matched_path_or_any_parents(&e.path, e.path.is_dir()).is_ignore());
-                                if !ignore {
-                                    self.run_utility()?;
+            self.pump_events(rx.clone(), ctrlc_rx.clone(), &ignore_matcher)?;
+            if self.exit_after {
+                break;
+            }
+        }
 
-                                    if self.exit_after {
-                                        break;
-                                    }
-                                }
-                            },
-                            Err(errors) =>  errors.iter().for_each(|e| eprintln!("Error {:?}",e)),
+        Ok(())
+    }
+
+    fn pump_events(
+        &mut self,
+        rx: Receiver<DebounceEventResult>,
+        ctrlc_rx: Receiver<()>,
+        ignore_matcher: &Gitignore,
+    ) -> Result<()> {
+        select! {
+            // handle filesystem events
+            recv(rx) -> res => {
+                match res {
+                    Ok(inner) => match inner {
+                        Ok(events) => {
+                            let ignore = events.iter()
+                                .any(|e| ignore_matcher.matched_path_or_any_parents(&e.path, e.path.is_dir()).is_ignore());
+                            if !ignore {
+                                self.run_utility()?;
+                            }
                         },
-                        Err(e) => Err(e)?
-                    }
-                },
-                // handle timeout case
-                recv(crossbeam::channel::after(self.timeout)) -> _ => {
-                    self.run_utility()?;
-                },
-                // handle ctrl+c
-                recv(ctrlc_rx) -> _ => {
-                    self.kill_utility()?;
-                    break;
+                        Err(errors) =>  errors.iter().for_each(|e| eprintln!("Error {:?}",e)),
+                    },
+                    Err(e) => Err(e)?
                 }
+            },
+            // handle timeout case
+            recv(crossbeam::channel::after(self.timeout)) -> _ => {
+                self.run_utility()?;
+            },
+            // handle ctrl+c
+            recv(ctrlc_rx) -> _ => {
+                self.kill_utility()?;
+                self.exit_after = true;
             }
         }
 
@@ -141,9 +150,10 @@ impl IoWatch {
     }
 
     /// Creates an ignore matcher from ignore files in dir
-    fn get_ignore_matcher(&self, root: impl AsRef<Path>) -> Result<Gitignore> {
-        let gitignore_path = Path::new(root.as_ref()).join(".gitignore");
-        let ignore_path = Path::new(root.as_ref()).join(".ignore");
+    fn get_ignore_matcher(&self) -> Result<Gitignore> {
+        let root = env::current_dir()?;
+        let gitignore_path = Path::new(&root).join(".gitignore");
+        let ignore_path = Path::new(&root).join(".ignore");
 
         let mut builder = GitignoreBuilder::new(root);
         if gitignore_path.exists() {
