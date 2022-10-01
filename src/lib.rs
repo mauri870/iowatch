@@ -1,22 +1,20 @@
+use anyhow::{Context, Result};
+use clap::Parser;
+use crossbeam_channel::{select, Receiver};
+use ignore::gitignore::{Gitignore, GitignoreBuilder};
+use nix::sys::signal::{self, Signal};
+use nix::sys::wait::{Id, WaitPidFlag};
+use nix::unistd::Pid;
+use notify_debouncer_mini::new_debouncer;
+use notify_debouncer_mini::notify::RecursiveMode;
+use std::convert::TryFrom;
 use std::io::{self, Read};
 use std::os::unix::process::CommandExt;
 use std::path::Path;
 use std::process::{Child, Command};
 use std::time::Duration;
 use std::{env, thread};
-
-use anyhow::{Context, Result};
-use clap::Parser;
-use crossbeam_channel::{select, Receiver};
-use nix::sys::wait::{Id, WaitPidFlag};
-use notify_debouncer_mini::new_debouncer;
-use notify_debouncer_mini::notify::RecursiveMode;
 use thiserror::Error;
-
-use ignore::gitignore::{Gitignore, GitignoreBuilder};
-
-use nix::sys::signal::{self, Signal};
-use nix::unistd::Pid;
 
 #[derive(Debug, Error)]
 pub enum IoWatchError {
@@ -27,7 +25,7 @@ pub enum IoWatchError {
 #[derive(Debug, Parser)]
 #[command(name = "iowatch")]
 #[command(about = "Cross platform way to run arbitrary commands when files change")]
-pub struct IoWatch {
+pub struct Cli {
     /// Clear the screen before invoking the utility
     #[arg(short = 'c')]
     clear_term: bool,
@@ -54,12 +52,19 @@ pub struct IoWatch {
     kill_signal: String,
     /// The utility to run when files change
     utility: Vec<String>,
+}
 
-    /// The currently running utility process
-    #[arg(skip)]
+pub struct IoWatch {
+    exit_after: bool,
+    postpone: bool,
+    recursive_mode: RecursiveMode,
+    files: Vec<String>,
+    timeout: Duration,
+    delay: u64,
+    clear_term: bool,
+    kill_sig: Signal,
+    utility_cmd: Vec<String>,
     utility_process: Option<Child>,
-    /// Flag to track if is first execution
-    #[arg(skip)]
     first_run: bool,
 }
 
@@ -67,17 +72,19 @@ impl IoWatch {
     /// Run the application
     pub fn run(mut self) -> Result<()> {
         let (tx, rx) = crossbeam_channel::unbounded();
-
         let mut debouncer = new_debouncer(Duration::from_millis(25), None, tx)?;
+        let watcher = debouncer.watcher();
 
-        self.first_run = true;
-        self.utility = if !self.use_shell {
-            self.utility
-        } else {
-            let mut shell = IoWatch::get_shell_cmd();
-            shell.append(&mut self.utility);
-            shell
-        };
+        for f in &self.files {
+            watcher
+                .watch(f.as_ref(), self.recursive_mode)
+                .with_context(|| format!("Failed to watch {}", f))?;
+        }
+
+        let ignore_dir = env::current_dir()?;
+        let ignore_matcher = self.get_ignore_matcher(ignore_dir)?;
+
+        let ctrlc_rx = self.ctrlc_events()?;
 
         if !self.postpone {
             self.run_utility()?;
@@ -86,39 +93,6 @@ impl IoWatch {
             }
         }
 
-        let mut buf = String::new();
-        io::stdin()
-            .read_to_string(&mut buf)
-            .context("Failed to read files to watch")?;
-
-        let files: Vec<&str> = buf.trim().split('\n').filter(|s| !s.is_empty()).collect();
-
-        if files.is_empty() {
-            Err(IoWatchError::NoFilesToWatch)?
-        }
-
-        let recursive_mode = if self.recursive {
-            RecursiveMode::Recursive
-        } else {
-            RecursiveMode::NonRecursive
-        };
-
-        let watcher = debouncer.watcher();
-
-        for f in files {
-            watcher
-                .watch(Path::new(f), recursive_mode)
-                .with_context(|| format!("Failed to watch {}", f))?;
-        }
-
-        let ignore_dir = env::current_dir()?;
-        let ignore_matcher = self.get_ignore_matcher(ignore_dir)?;
-
-        let timeout = Duration::from_secs(self.timeout.unwrap_or(u64::MAX));
-
-        let ctrlc_rx = self.ctrlc_events()?;
-
-        // Handle timeout case in select to also run the utility
         loop {
             select! {
                 // handle filesystem events
@@ -142,7 +116,7 @@ impl IoWatch {
                     }
                 },
                 // handle timeout case
-                recv(crossbeam::channel::after(timeout)) -> _ => {
+                recv(crossbeam::channel::after(self.timeout)) -> _ => {
                     self.run_utility()?;
                 },
                 // handle ctrl+c
@@ -208,7 +182,7 @@ impl IoWatch {
         match self.utility_process {
             Some(ref mut child) => {
                 if cfg!(unix) {
-                    let sig = self.kill_signal.parse::<Signal>()?;
+                    let sig = self.kill_sig;
                     let pgid = nix::unistd::getpgid(Some(Pid::from_raw(child.id() as i32)))?;
 
                     signal::killpg(pgid, sig)?;
@@ -250,18 +224,68 @@ impl IoWatch {
         }
 
         self.utility_process = Some(
-            Command::new(&self.utility[0])
-                .args(&self.utility[1..])
+            Command::new(&self.utility_cmd[0])
+                .args(&self.utility_cmd[1..])
                 .process_group(0)
                 .spawn()
                 .context(format!(
                     "failed to run the provided utility: {}",
-                    &self.utility[0]
+                    &self.utility_cmd[0]
                 ))?,
         );
 
         self.first_run = false;
 
         Ok(())
+    }
+}
+
+impl TryFrom<Cli> for IoWatch {
+    type Error = anyhow::Error;
+    fn try_from(cli: Cli) -> Result<Self> {
+        let mut cli = cli;
+        let utility = if !cli.use_shell {
+            cli.utility
+        } else {
+            let mut shell = IoWatch::get_shell_cmd();
+            shell.append(&mut cli.utility);
+            shell
+        };
+
+        let mut buf = String::new();
+        io::stdin()
+            .read_to_string(&mut buf)
+            .context("Failed to read files to watch")?;
+
+        let files: Vec<String> = buf
+            .trim()
+            .split('\n')
+            .filter(|s| !s.is_empty())
+            .map(String::from)
+            .collect();
+
+        if files.is_empty() {
+            Err(IoWatchError::NoFilesToWatch)?
+        }
+
+        let recursive = if cli.recursive {
+            RecursiveMode::Recursive
+        } else {
+            RecursiveMode::NonRecursive
+        };
+
+        Ok(IoWatch {
+            exit_after: cli.exit_after,
+            postpone: cli.postpone,
+            recursive_mode: recursive,
+            first_run: true,
+            utility_cmd: utility,
+            files,
+            delay: cli.delay,
+            clear_term: cli.clear_term,
+            timeout: Duration::from_secs(cli.timeout.unwrap_or(u64::MAX)),
+            kill_sig: cli.kill_signal.parse::<Signal>()?,
+            utility_process: None,
+        })
     }
 }

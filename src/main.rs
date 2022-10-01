@@ -1,9 +1,10 @@
+use std::convert::TryInto;
+
 use anyhow::Result;
 use clap::Parser;
 
-use iowatch::IoWatch;
-
 fn main() -> Result<()> {
-    IoWatch::parse().run()?;
-    Ok(())
+    let cli = iowatch::Cli::parse();
+    let iowatch: iowatch::IoWatch = cli.try_into()?;
+    iowatch.run()
 }
