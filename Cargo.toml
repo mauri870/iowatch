@@ -9,5 +9,5 @@ notify = "4.0.17"
 thiserror = "1.0.23"
 anyhow = "1.0"
 clap = { version = "4.0.4", features = ["derive"]}
-nix = "0.24.2"
+nix = { version = "0.24.2", features = ["process"]}
 ignore = { git = "https://github.com/mauri870/ripgrep", branch = "ignore-panic-outside-root" }

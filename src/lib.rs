@@ -1,4 +1,5 @@
 use std::io::{self, Read};
+use std::os::unix::process::CommandExt;
 use std::path::Path;
 use std::process::{Child, Command};
 use std::sync::mpsc::{Receiver, RecvTimeoutError};
@@ -7,6 +8,7 @@ use std::{env, thread};
 
 use anyhow::{Context, Result};
 use clap::Parser;
+use nix::sys::wait::{Id, WaitPidFlag};
 use notify::{DebouncedEvent, RecommendedWatcher, RecursiveMode, Watcher};
 use thiserror::Error;
 
@@ -184,14 +186,19 @@ impl IoWatch {
             Some(ref mut child) => {
                 if cfg!(unix) {
                     let sig = self.kill_signal.parse::<Signal>()?;
-                    signal::kill(Pid::from_raw(child.id() as i32), sig)?;
+                    let pgid = nix::unistd::getpgid(Some(Pid::from_raw(child.id() as i32)))?;
+
+                    signal::killpg(pgid, sig)?;
+
+                    nix::sys::wait::waitid(Id::PGid(pgid), WaitPidFlag::all())
+                        .map(|_| ())
+                        .map_err(Into::into)
                 } else {
                     child
                         .kill()
                         .with_context(|| format!("failed to kill child process"))?;
+                    child.wait().map(|_| ()).map_err(Into::into)
                 }
-
-                child.wait().map(|_| ()).map_err(Into::into)
             }
             None => Ok(()),
         }
@@ -222,6 +229,7 @@ impl IoWatch {
         self.utility_process = Some(
             Command::new(&self.utility[0])
                 .args(&self.utility[1..])
+                .process_group(0)
                 .spawn()
                 .context(format!(
                     "failed to run the provided utility: {}",
