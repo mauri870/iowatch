@@ -2,19 +2,75 @@ use anyhow::{Context, Result};
 use clap::Parser;
 use crossbeam_channel::{select, Receiver};
 use ignore::gitignore::{Gitignore, GitignoreBuilder};
-use nix::sys::signal::{self, Signal};
-use nix::sys::wait::{Id, WaitPidFlag};
-use nix::unistd::Pid;
 use notify_debouncer_mini::notify::RecursiveMode;
 use notify_debouncer_mini::{new_debouncer, DebounceEventResult};
 use std::convert::TryFrom;
+use std::ffi::OsStr;
 use std::io::{self, Read};
-use std::os::unix::process::CommandExt;
 use std::path::Path;
 use std::process::{Child, Command};
 use std::time::Duration;
 use std::{env, thread};
 use thiserror::Error;
+
+#[cfg(unix)]
+use {
+    nix::sys::signal::{self, Signal},
+    nix::sys::wait::{Id, WaitPidFlag},
+    nix::unistd::Pid,
+    std::os::unix::process::CommandExt,
+};
+
+#[cfg(unix)]
+fn kill(child: &mut Child, sig: &str) -> Result<()> {
+    let sig = sig.parse::<Signal>()?;
+    let pgid = nix::unistd::getpgid(Some(Pid::from_raw(child.id() as i32)))?;
+
+    signal::killpg(pgid, sig)?;
+
+    // HACK: we use a custom nix crate to have waitid available on macos.
+    // Not sure why they feature flagged macos, it definitely has a posix compliant waitid implementation.
+    nix::sys::wait::waitid(Id::PGid(pgid), WaitPidFlag::all())
+        .map(|_| ())
+        .map_err(Into::into)
+}
+
+#[cfg(unix)]
+fn spawn(
+    program: impl AsRef<str>,
+    args: impl IntoIterator<Item = impl AsRef<OsStr>>,
+) -> Result<Child> {
+    Command::new(program.as_ref())
+        .args(args.into_iter())
+        .process_group(0)
+        .spawn()
+        .context(format!(
+            "failed to spawn the provided utility: {}",
+            program.as_ref()
+        ))
+}
+
+#[cfg(windows)]
+fn spawn(
+    program: impl AsRef<str>,
+    args: impl IntoIterator<Item = impl AsRef<OsStr>>,
+) -> Result<Child> {
+    Command::new(program.as_ref())
+        .args(args.into_iter())
+        .spawn()
+        .context(format!(
+            "failed to spawn the provided utility: {}",
+            program.as_ref()
+        ))
+}
+
+#[cfg(windows)]
+fn kill(child: &mut Child, _sig: &str) -> Result<()> {
+    child
+        .kill()
+        .with_context(|| format!("failed to kill child process"))?;
+    child.wait().map(|_| ()).map_err(Into::into)
+}
 
 #[derive(Debug, Error)]
 pub enum IoWatchError {
@@ -63,7 +119,7 @@ pub struct IoWatch {
     timeout: Duration,
     delay: u64,
     clear_term: bool,
-    kill_sig: Signal,
+    kill_sig: String,
     utility_cmd: Vec<String>,
     utility_process: Option<Child>,
     first_run: bool,
@@ -191,25 +247,7 @@ impl IoWatch {
     /// Kill the utility if still running
     fn kill_utility(&mut self) -> Result<()> {
         match self.utility_process {
-            Some(ref mut child) => {
-                if cfg!(unix) {
-                    let sig = self.kill_sig;
-                    let pgid = nix::unistd::getpgid(Some(Pid::from_raw(child.id() as i32)))?;
-
-                    signal::killpg(pgid, sig)?;
-
-                    // HACK: we use a custom nix crate to have waitid available on macos.
-                    // Not sure why they feature flagged macos, it definitely has a posix compliant waitid implementation.
-                    nix::sys::wait::waitid(Id::PGid(pgid), WaitPidFlag::all())
-                        .map(|_| ())
-                        .map_err(Into::into)
-                } else {
-                    child
-                        .kill()
-                        .with_context(|| format!("failed to kill child process"))?;
-                    child.wait().map(|_| ()).map_err(Into::into)
-                }
-            }
+            Some(ref mut child) => kill(child, &self.kill_sig),
             None => Ok(()),
         }
     }
@@ -236,16 +274,7 @@ impl IoWatch {
             self.wait_delay()?;
         }
 
-        self.utility_process = Some(
-            Command::new(&self.utility_cmd[0])
-                .args(&self.utility_cmd[1..])
-                .process_group(0)
-                .spawn()
-                .context(format!(
-                    "failed to run the provided utility: {}",
-                    &self.utility_cmd[0]
-                ))?,
-        );
+        self.utility_process = Some(spawn(&self.utility_cmd[0], &self.utility_cmd[1..])?);
 
         self.first_run = false;
 
@@ -297,7 +326,7 @@ impl TryFrom<Cli> for IoWatch {
             delay: cli.delay,
             clear_term: cli.clear_term,
             timeout: Duration::from_secs(cli.timeout.unwrap_or(u64::MAX)),
-            kill_sig: cli.kill_signal.parse::<Signal>()?,
+            kill_sig: cli.kill_signal,
             utility_process: None,
         })
     }
