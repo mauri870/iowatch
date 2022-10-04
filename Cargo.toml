@@ -1,13 +1,13 @@
 [package]
 name = "iowatch"
-version = "0.2.0"
+version = "0.3.0"
 authors = ["Mauri de Souza Meneguzzo <mauri870@gmail.com>"]
 edition = "2018"
 
 [dependencies]
 thiserror = "1.0.23"
 anyhow = "1.0"
-clap = { version = "4.0.4", features = ["derive"]}
+clap = { version = "4.0.4", features = ["derive", "cargo"]}
 nix = { git = "https://github.com/mauri870/nix", branch = "master", features = ["process"]}
 ignore = { git = "https://github.com/mauri870/ripgrep", branch = "ignore-panic-outside-root" }
 notify-debouncer-mini = "0.2.1"

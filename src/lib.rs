@@ -25,6 +25,7 @@ pub enum IoWatchError {
 #[derive(Debug, Parser)]
 #[command(name = "iowatch")]
 #[command(about = "Cross platform way to run arbitrary commands when files change")]
+#[command(author, version)]
 pub struct Cli {
     /// Clear the screen before invoking the utility
     #[arg(short = 'c')]
