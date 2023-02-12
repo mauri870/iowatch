@@ -12,6 +12,7 @@ use std::process::{Child, Command};
 use std::time::Duration;
 use std::{env, thread};
 use thiserror::Error;
+use nix::errno::Errno;
 
 #[cfg(unix)]
 use {
@@ -24,7 +25,12 @@ use {
 #[cfg(unix)]
 fn kill(child: &mut Child, sig: &str) -> Result<()> {
     let sig = sig.parse::<Signal>()?;
-    let pgid = nix::unistd::getpgid(Some(Pid::from_raw(child.id() as i32)))?;
+    let pgid = match nix::unistd::getpgid(Some(Pid::from_raw(child.id() as i32))) {
+        Ok(pid) => pid,
+        // Pid does not exist
+        Err(Errno::ESRCH) => return Ok(()),
+        Err(e) => Err(e)?
+    };
 
     signal::killpg(pgid, sig)?;
 
