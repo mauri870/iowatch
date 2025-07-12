@@ -8,6 +8,8 @@ edition = "2018"
 thiserror = "1.0.23"
 anyhow = "1.0"
 clap = { version = "4.0.4", features = ["derive", "cargo"]}
+log = "0.4.17"
+env_logger = "0.11.8"
 nix = { git = "https://github.com/mauri870/nix", branch = "master", features = ["process"]}
 ignore = { git = "https://github.com/mauri870/ripgrep", branch = "ignore-panic-outside-root" }
 notify-debouncer-mini = "0.2.1"

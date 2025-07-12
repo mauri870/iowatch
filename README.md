@@ -22,7 +22,7 @@ Example:
 
 ```bash
 touch /tmp/file.txt
-echo /tmp/file.txt | iowatch -p echo "> file changed!"
+iowatch -f /tmp/file.txt -p echo '> file changed!'
 
 # in another terminal...
 echo 'that is a new line' >> /tmp/file.txt
@@ -33,7 +33,7 @@ echo 'that is a new line' >> /tmp/file.txt
 For commands that uses builtins, pipes or output redirection that needs to run in a shell, there's a `-s` flag that uses the default system shell:
 
 ```bash
-find /tmp -type f -name "/tmp/*.txt" | iowatch -s "echo Hello | rev"
+find /tmp -type f -name '/tmp/*.txt' | iowatch -s 'echo Hello | rev'
 ```
 
 It also watch changes recursively if a directory is provided!
@@ -70,4 +70,19 @@ For arch linux users:
 
 ```bash
 makepkg -sif
+```
+
+# Tests
+
+We use bats for testing, you can run them with:
+
+```bash
+cargo build --release
+bats ./tests
+```
+
+# Debugging
+
+```bash
+RUST_LOG=debug iowatch
 ```

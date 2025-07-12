@@ -2,11 +2,13 @@ use anyhow::{Context, Result};
 use clap::Parser;
 use crossbeam_channel::{select, Receiver};
 use ignore::gitignore::{Gitignore, GitignoreBuilder};
+use log::{debug, info};
 use nix::errno::Errno;
 use notify_debouncer_mini::notify::RecursiveMode;
 use notify_debouncer_mini::{new_debouncer, DebounceEventResult};
 use std::convert::TryFrom;
 use std::ffi::OsStr;
+use std::fmt::Debug;
 use std::io::{self, Read};
 use std::path::Path;
 use std::process::{Child, Command};
@@ -85,6 +87,9 @@ pub enum IoWatchError {
 #[command(about = "Cross platform way to run arbitrary commands when files change")]
 #[command(author, version)]
 pub struct Cli {
+    /// File or directory to watch. To specify multiple files or directories, use standard input instead.
+    #[arg(short = 'f')]
+    input_file: Option<String>,
     /// Clear the screen before invoking the utility
     #[arg(short = 'c')]
     clear_term: bool,
@@ -130,6 +135,7 @@ pub struct IoWatch {
 impl IoWatch {
     /// Run the application
     pub fn run(mut self) -> Result<()> {
+        debug!("Starting IoWatch with utility: {:?}", self.utility_cmd);
         let (tx, rx) = crossbeam_channel::unbounded();
         let mut debouncer = new_debouncer(Duration::from_millis(25), None, tx)?;
         let watcher = debouncer.watcher();
@@ -144,9 +150,13 @@ impl IoWatch {
 
         let ctrlc_rx = self.ctrlc_events()?;
 
+        debug!("exit after: {}", self.exit_after);
+
         if !self.postpone {
+            debug!("Running utility immediately as postpone is false");
             self.run_utility()?;
             if self.exit_after {
+                debug!("Exiting after first run as requested");
                 return Ok(());
             }
         }
@@ -186,10 +196,12 @@ impl IoWatch {
             },
             // handle timeout case
             recv(crossbeam::channel::after(self.timeout)) -> _ => {
+                debug!("Timeout reached, running utility");
                 self.run_utility()?;
             },
             // handle ctrl+c
             recv(ctrlc_rx) -> _ => {
+                info!("Ctrl+C received, exiting...");
                 self.kill_utility()?;
                 self.exit_after = true;
             }
@@ -296,17 +308,21 @@ impl TryFrom<Cli> for IoWatch {
             shell
         };
 
-        let mut buf = String::new();
-        io::stdin()
-            .read_to_string(&mut buf)
-            .context("Failed to read files to watch")?;
-
-        let files: Vec<String> = buf
-            .trim()
-            .split('\n')
-            .filter(|s| !s.is_empty())
-            .map(String::from)
-            .collect();
+        let files: Vec<String> = if let Some(file) = cli.input_file {
+            debug!("Using input file: {}", file);
+            vec![file]
+        } else {
+            debug!("Reading files from stdin");
+            let mut buf = String::new();
+            io::stdin()
+                .read_to_string(&mut buf)
+                .context("Failed to read files from stdin")?;
+            buf.trim()
+                .lines()
+                .filter(|s| !s.is_empty())
+                .map(String::from)
+                .collect()
+        };
 
         if files.is_empty() {
             Err(IoWatchError::NoFilesToWatch)?
@@ -331,5 +347,21 @@ impl TryFrom<Cli> for IoWatch {
             kill_sig: cli.kill_signal,
             utility_process: None,
         })
+    }
+}
+
+impl Debug for IoWatch {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("IoWatch")
+            .field("exit_after", &self.exit_after)
+            .field("postpone", &self.postpone)
+            .field("recursive_mode", &self.recursive_mode)
+            .field("files", &self.files)
+            .field("timeout", &self.timeout)
+            .field("delay", &self.delay)
+            .field("clear_term", &self.clear_term)
+            .field("kill_sig", &self.kill_sig)
+            .field("utility_cmd", &self.utility_cmd)
+            .finish()
     }
 }
