@@ -111,7 +111,7 @@ pub struct Cli {
     /// The time delay in ms to apply before running the utility
     #[arg(short = 'd', default_value = "100")]
     delay: u64,
-    /// The kill signal to use, defaults to SIGTERM
+    /// The kill signal to use
     #[arg(short = 'k', default_value = "SIGTERM")]
     kill_signal: String,
     /// The utility to run when files change
