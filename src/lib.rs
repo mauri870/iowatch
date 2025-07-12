@@ -58,7 +58,6 @@ fn spawn(
 
 #[cfg(unix)]
 fn configure_command(cmd: &mut Command) {
-    use std::os::unix::process::CommandExt;
     cmd.process_group(0);
 }
 
