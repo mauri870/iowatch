@@ -2,6 +2,7 @@ use anyhow::{Context, Result};
 use clap::Parser;
 use crossbeam_channel::{select, Receiver};
 use ignore::gitignore::{Gitignore, GitignoreBuilder};
+use nix::errno::Errno;
 use notify_debouncer_mini::notify::RecursiveMode;
 use notify_debouncer_mini::{new_debouncer, DebounceEventResult};
 use std::convert::TryFrom;
@@ -12,7 +13,6 @@ use std::process::{Child, Command};
 use std::time::Duration;
 use std::{env, thread};
 use thiserror::Error;
-use nix::errno::Errno;
 
 #[cfg(unix)]
 use {
@@ -29,7 +29,7 @@ fn kill(child: &mut Child, sig: &str) -> Result<()> {
         Ok(pid) => pid,
         // Pid does not exist
         Err(Errno::ESRCH) => return Ok(()),
-        Err(e) => Err(e)?
+        Err(e) => Err(e)?,
     };
 
     signal::killpg(pgid, sig)?;
@@ -41,33 +41,30 @@ fn kill(child: &mut Child, sig: &str) -> Result<()> {
         .map_err(Into::into)
 }
 
-#[cfg(unix)]
 fn spawn(
     program: impl AsRef<str>,
     args: impl IntoIterator<Item = impl AsRef<OsStr>>,
 ) -> Result<Child> {
-    Command::new(program.as_ref())
-        .args(args.into_iter())
-        .process_group(0)
-        .spawn()
-        .context(format!(
-            "failed to spawn the provided utility: {}",
-            program.as_ref()
-        ))
+    let mut cmd = Command::new(program.as_ref());
+    cmd.args(args.into_iter());
+
+    configure_command(&mut cmd);
+
+    cmd.spawn().context(format!(
+        "failed to spawn the provided utility: {}",
+        program.as_ref()
+    ))
+}
+
+#[cfg(unix)]
+fn configure_command(cmd: &mut Command) {
+    use std::os::unix::process::CommandExt;
+    cmd.process_group(0);
 }
 
 #[cfg(windows)]
-fn spawn(
-    program: impl AsRef<str>,
-    args: impl IntoIterator<Item = impl AsRef<OsStr>>,
-) -> Result<Child> {
-    Command::new(program.as_ref())
-        .args(args.into_iter())
-        .spawn()
-        .context(format!(
-            "failed to spawn the provided utility: {}",
-            program.as_ref()
-        ))
+fn configure_command(_cmd: &mut Command) {
+    // No-op on Windows
 }
 
 #[cfg(windows)]
