@@ -45,7 +45,7 @@ teardown() {
   OUTFILE="$TMPDIR/iowatch.txt"
 
   # Start iowatch in the background, postponed, watching TESTFILE
-  "$IOWATCH" -p -f "$TESTFILE" -s "echo changed >> $OUTFILE" &
+  "$IOWATCH" -p -f "$TESTFILE" -z echo changed > "$OUTFILE" &
   WATCH_PID=$!
 
   # modify test file
@@ -79,8 +79,25 @@ teardown() {
 }
 
 @test "reads files from stdin" {
-  run timeout 2 bash -c "echo \"$TESTFILE\" | \"$IOWATCH\" -z echo 'read from stdin'"
-  echo "$status $output"
+  OUTFILE="$TMPDIR/iowatch.txt"
+
+  # Start iowatch in the background, postponed, reading file from stdin
+  bash -c "echo \"$TESTFILE\" | \"$IOWATCH\" -p -z echo changed" > "$OUTFILE" &
+  WATCH_PID=$!
+
+  # Give it a moment to start up
+  sleep 0.2
+  
+  # Modify the test file
+  echo "new content" >> "$TESTFILE"
+  sleep 0.5
+
+  # Kill iowatch to clean up (in case it's still running)
+  kill "$WATCH_PID" 2>/dev/null || true
+  wait "$WATCH_PID" 2>/dev/null || true
+
+  # Check that the output file was created and contains the expected message
+  run cat "$OUTFILE"
   [ "$status" -eq 0 ]
-  [[ "$output" == "read from stdin" ]]
+  [[ "$output" == "changed" ]]
 }
