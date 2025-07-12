@@ -50,22 +50,15 @@ fn spawn(
     let mut cmd = Command::new(program.as_ref());
     cmd.args(args.into_iter());
 
-    configure_command(&mut cmd);
+    #[cfg(unix)]
+    {
+        cmd.process_group(0);
+    }
 
     cmd.spawn().context(format!(
         "failed to spawn the provided utility: {}",
         program.as_ref()
     ))
-}
-
-#[cfg(unix)]
-fn configure_command(cmd: &mut Command) {
-    cmd.process_group(0);
-}
-
-#[cfg(windows)]
-fn configure_command(_cmd: &mut Command) {
-    // No-op on Windows
 }
 
 #[cfg(windows)]
@@ -299,6 +292,13 @@ impl IoWatch {
 impl TryFrom<Cli> for IoWatch {
     type Error = anyhow::Error;
     fn try_from(cli: Cli) -> Result<Self> {
+        #[cfg(unix)]
+        {
+            cli.kill_signal
+                .parse::<Signal>()
+                .with_context(|| format!("Invalid kill signal: {}", cli.kill_signal))?;
+        }
+
         let mut cli = cli;
         let utility = if !cli.use_shell {
             cli.utility
