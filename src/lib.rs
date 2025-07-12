@@ -130,7 +130,9 @@ impl IoWatch {
     pub fn run(mut self) -> Result<()> {
         debug!("Starting IoWatch with utility: {:?}", self.utility_cmd);
         let (tx, rx) = crossbeam_channel::unbounded();
-        let mut debouncer = new_debouncer(Duration::from_millis(25), None, tx)?;
+        let mut debouncer = new_debouncer(Duration::from_millis(25), move |result| {
+            let _ = tx.send(result);
+        })?;
         let watcher = debouncer.watcher();
 
         for f in &self.files {
@@ -182,7 +184,7 @@ impl IoWatch {
                                 self.run_utility()?;
                             }
                         },
-                        Err(errors) =>  errors.iter().for_each(|e| eprintln!("Error {:?}",e)),
+                        Err(errors) =>  eprintln!("Error {:?}", errors),
                     },
                     Err(e) => Err(e)?
                 }
